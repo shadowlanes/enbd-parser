@@ -1,4 +1,4 @@
-import { PdfParser, Transaction } from '../../src/parser/pdf-parser';
+import { PdfParser } from '../../src/parser/pdf-parser';
 
 describe('PdfParser', () => {
   let parser: PdfParser;
@@ -208,6 +208,19 @@ describe('PdfParser', () => {
       expect(parser['parseTransactionLine']('01/01/2023')).toBeNull();
       expect(parser['parseTransactionLine']('Too short')).toBeNull();
     });
+
+    it('should parse foreign transaction line correctly', () => {
+      const line = '26/01/202527/01/2025*WWW.PERPLEXITY.AI SAN FRANCISCO US 20.00 USD (1 AED = USD 0.26396) 75.77';
+      const result = parser['parseTransactionLine'](line);
+      
+      expect(result).toEqual({
+        transactionDate: '26/01/2025',
+        postingDate: '27/01/2025',
+        description: '*WWW.PERPLEXITY.AI SAN FRANCISCO US 20.00 USD (1 AED = USD 0.26396)',
+        amount: 75.77,
+        type: 'credit'
+      });
+    });
   });
 
   describe('extractTransactionSection', () => {
@@ -333,6 +346,112 @@ describe('PdfParser', () => {
       expect(result.length).toBe(2);
       expect(result[0]).toContain('01/01/2023');
       expect(result[1]).toContain('05/01/2023');
+    });
+
+    it('should handle regular single line transactions', () => {
+      const text = `
+        Header info
+        Transaction Date,Description,Date,Amount
+        26/01/202526/01/2025CONNECTECH L.L.C DUBAI ARE              23.50
+        STATEMENT SUMMARY (AED)
+      `;
+      
+      const result = parser['extractTransactionSection'](text);
+      
+      expect(result.length).toBe(1);
+      expect(result[0]).toBe('26/01/202526/01/2025CONNECTECH L.L.C DUBAI ARE              23.50');
+    });
+    
+    it('should handle multi-line foreign transactions', () => {
+      const text = `
+        Header info
+        Transaction Date,Description,Date,Amount
+        26/01/202526/01/2025CONNECTECH L.L.C DUBAI ARE              23.50
+        26/01/202527/01/2025*WWW.PERPLEXITY.AI SAN FRANCISCO US 20.00 USD
+        (1 AED = USD 0.26396)
+        75.77
+        26/01/202527/01/2025GOOD LIFE CAFE AND RES DUBAI ARE        73.00
+        STATEMENT SUMMARY (AED)
+      `;
+      
+      const result = parser['extractTransactionSection'](text);
+      
+      expect(result.length).toBe(3);
+      expect(result[0]).toBe('26/01/202526/01/2025CONNECTECH L.L.C DUBAI ARE              23.50');
+      expect(result[1]).toBe('26/01/202527/01/2025*WWW.PERPLEXITY.AI SAN FRANCISCO US 20.00 USD (1 AED = USD 0.26396) 75.77');
+      expect(result[2]).toBe('26/01/202527/01/2025GOOD LIFE CAFE AND RES DUBAI ARE        73.00');
+    });
+
+    it('should handle multi-line foreign transactions 0  Stubhub GBP example', () => {
+      const text = `
+        Header info
+        Transaction Date,Description,Date,Amount
+        26/01/202526/01/2025CONNECTECH L.L.C DUBAI ARE              23.50
+        26/01/202527/01/2025*STUBHUB INC 8667882482 USA 950.69 GBP
+        (1 AED = GBP 0.21119)
+        4,501.56
+        26/01/202527/01/2025GOOD LIFE CAFE AND RES DUBAI ARE        73.00
+        STATEMENT SUMMARY (AED)
+      `;
+      
+      const result = parser['extractTransactionSection'](text);
+      
+      expect(result.length).toBe(3);
+      expect(result[0]).toBe('26/01/202526/01/2025CONNECTECH L.L.C DUBAI ARE              23.50');
+      expect(result[1]).toBe('26/01/202527/01/2025*STUBHUB INC 8667882482 USA 950.69 GBP (1 AED = GBP 0.21119) 4,501.56');
+      expect(result[2]).toBe('26/01/202527/01/2025GOOD LIFE CAFE AND RES DUBAI ARE        73.00');
+    });
+
+    it('should handle multi-line foreign transactions where next line is also multi line', () => {
+      const text = `
+        Header info
+        Transaction Date,Description,Date,Amount
+        26/01/202526/01/2025CONNECTECH L.L.C DUBAI ARE              23.50
+        26/01/202527/01/2025*STUBHUB INC 8667882482 USA 950.69 GBP
+        (1 AED = GBP 0.21119)
+        4,501.56
+        26/01/202527/01/2025GOOD LIFE CAFE AND RES DUBAI ARE        
+        73.00
+        STATEMENT SUMMARY (AED)
+      `;
+      
+      const result = parser['extractTransactionSection'](text);
+      
+      expect(result.length).toBe(3);
+      expect(result[0]).toBe('26/01/202526/01/2025CONNECTECH L.L.C DUBAI ARE              23.50');
+      expect(result[1]).toBe('26/01/202527/01/2025*STUBHUB INC 8667882482 USA 950.69 GBP (1 AED = GBP 0.21119) 4,501.56');
+      expect(result[2]).toBe('26/01/202527/01/2025GOOD LIFE CAFE AND RES DUBAI ARE 73.00');
+    });
+  });
+
+  describe('doesLineEndWithAmount', () => {
+    it('should return true for lines ending with simple amounts', () => {
+      expect(parser['doesLineEndWithAmount']('26/01/202526/01/2025CONNECTECH L.L.C DUBAI ARE 23.50')).toBe(true);
+      expect(parser['doesLineEndWithAmount']('Some text with amount 100.00')).toBe(true);
+      expect(parser['doesLineEndWithAmount']('Negative amount -50.75')).toBe(true);
+    });
+
+    it('should return true for lines ending with amounts containing commas', () => {
+      expect(parser['doesLineEndWithAmount']('Text ending with 1,234.56')).toBe(true);
+      expect(parser['doesLineEndWithAmount']('Large amount 10,000.00')).toBe(true);
+      expect(parser['doesLineEndWithAmount']('Very large amount 1,000,000.00')).toBe(true);
+    });
+
+    it('should return false for lines not ending with valid amounts', () => {
+      expect(parser['doesLineEndWithAmount']('Text without amount')).toBe(false);
+      expect(parser['doesLineEndWithAmount']('Amount with text after 100.00 AED')).toBe(false);
+      expect(parser['doesLineEndWithAmount']('26/01/202527/01/2025*WWW.PERPLEXITY.AI SAN FRANCISCO US 20.00 USD')).toBe(false);
+    });
+
+    it('should return false for lines ending with incomplete or malformed numbers', () => {
+      expect(parser['doesLineEndWithAmount']('Incomplete number 123.')).toBe(false);
+      expect(parser['doesLineEndWithAmount']('Number with non-numeric suffix 123.45)')).toBe(false);
+      expect(parser['doesLineEndWithAmount']('Number in parentheses (123.45)')).toBe(false);
+    });
+
+    it('should handle edge cases with currency conversion information', () => {
+      expect(parser['doesLineEndWithAmount']('USD 20.00 (1 AED = USD 0.26396)')).toBe(false);
+      expect(parser['doesLineEndWithAmount']('(1 AED = GBP 0.21119) 4,501.56')).toBe(true);
     });
   });
 });
