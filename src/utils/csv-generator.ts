@@ -4,11 +4,11 @@ import * as fs from 'fs';
 import { Transaction } from '../parser/pdf-parser';
 
 export class CsvGenerator {
-  async generateCsv(transactions: Transaction[], outputPath?: string): Promise<string> {
+  async generateCsv(transactions: Transaction[], outputPath?: string, baseFilename?: string): Promise<string> {
     try {
       // Generate output path if not provided
       if (!outputPath) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp
         const outputDir = path.join(process.cwd(), 'statements', 'parsed');
         
         // Ensure the output directory exists
@@ -16,7 +16,12 @@ export class CsvGenerator {
           fs.mkdirSync(outputDir, { recursive: true });
         }
         
-        outputPath = path.join(outputDir, `transactions-${timestamp}.csv`);
+        // Use base filename if provided, otherwise use "transactions"
+        const filename = baseFilename ? 
+          `${baseFilename}-${timestamp}.csv` : 
+          `transactions-${timestamp}.csv`;
+        
+        outputPath = path.join(outputDir, filename);
       }
       
       // Create CSV writer

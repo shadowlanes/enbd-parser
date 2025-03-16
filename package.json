@@ -4,18 +4,24 @@
   "description": "parses enbd credit card statement and generates csv",
   "main": "index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "parse": "ts-node src/app.ts parse"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "parse": "ts-node src/app.ts parse",
+    "clean": "rm -rf dist statements/parsed"
   },
   "author": "sd",
   "license": "MIT",
   "devDependencies": {
+    "@types/jest": "^29.5.12",
     "@types/node": "^20.17.24",
     "@types/pdf-parse": "^1.1.4",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
   },
   "dependencies": {
+    "csv-parser": "^3.0.0",
     "csv-writer": "^1.6.0",
     "pdf-parse": "^1.1.1"
   }
